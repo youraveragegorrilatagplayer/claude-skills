@@ -1,42 +1,9 @@
 #!/usr/bin/env bash
-# Installs every skill and agent in this repo into Claude Code on this computer (macOS / Linux / Git Bash).
-#   ./install.sh          # skip skills that already exist
-#   ./install.sh --force  # overwrite them with this repo's copy
+# macOS / Linux launcher: checks for Node and Git, then runs install.mjs with whatever options you pass.
+#   bash install.sh          core skills + MCP servers
+#   bash install.sh --all    everything in the catalog
 set -euo pipefail
-here="$(cd "$(dirname "$0")" && pwd)"
-force=0; [ "${1:-}" = "--force" ] && force=1
-skills="$HOME/.claude/skills"; agents="$HOME/.claude/agents"
-mkdir -p "$skills" "$agents"
-added=0; skipped=0
-
-install_dir() { # src name
-  local dest="$skills/$2"
-  if [ -e "$dest" ]; then
-    if [ $force -eq 0 ]; then skipped=$((skipped+1)); echo "  skip   $2 (already installed)"; return; fi
-    rm -rf "$dest"
-  fi
-  cp -R "$1" "$dest"; added=$((added+1)); echo "  added  $2"
-}
-
-echo "Skills from this repo:"
-for d in "$here"/skills/*/; do install_dir "${d%/}" "$(basename "$d")"; done
-
-echo "Skills fetched from their original repos:"
-tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-# upstream.json is one object per skill; pull out name/repo/path/license_file without needing Python or jq
-awk -F'"' '/"name"/{n=$4} /"repo"/{r=$4} /"path"/{p=$4} /"license_file"/{l=$4} /}/{if(n!=""){print n, r, p, l; n=""}}' \
-  "$here/upstream.json" | tr -d '\r' > "$tmp/list"
-while read -r name repo path lic; do
-  if git clone --depth 1 --quiet "$repo" "$tmp/$name"; then
-    cp "$tmp/$name/$lic" "$tmp/$name/$path/LICENSE" 2>/dev/null || true
-    install_dir "$tmp/$name/$path" "$name"
-  else echo "  warn   could not clone $repo"; fi
-done < "$tmp/list"
-
-echo "Agents:"
-for f in "$here"/agents/*.md; do
-  n="$(basename "$f")"
-  if [ -e "$agents/$n" ] && [ $force -eq 0 ]; then echo "  skip   ${n%.md}"; continue; fi
-  cp "$f" "$agents/$n"; echo "  added  ${n%.md}"
+for tool in node git; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "$tool is not installed (macOS: brew install $tool)"; exit 1; }
 done
-echo; echo "Done: $added skills added, $skipped already there. Restart Claude Code (or start a new session) to load them."
+exec node "$(cd "$(dirname "$0")" && pwd)/install.mjs" "$@"
