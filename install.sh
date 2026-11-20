@@ -23,13 +23,9 @@ for d in "$here"/skills/*/; do install_dir "${d%/}" "$(basename "$d")"; done
 
 echo "Skills fetched from their original repos:"
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-python3 - "$here/upstream.json" <<'PY' > "$tmp/list" || python - "$here/upstream.json" <<'PY2' > "$tmp/list"
-import json,sys
-for u in json.load(open(sys.argv[1])): print(u["name"], u["repo"], u["path"], u["license_file"])
-PY
-import json,sys
-for u in json.load(open(sys.argv[1])): print(u["name"], u["repo"], u["path"], u["license_file"])
-PY2
+# upstream.json is one object per skill; pull out name/repo/path/license_file without needing Python or jq
+awk -F'"' '/"name"/{n=$4} /"repo"/{r=$4} /"path"/{p=$4} /"license_file"/{l=$4} /}/{if(n!=""){print n, r, p, l; n=""}}' \
+  "$here/upstream.json" | tr -d '\r' > "$tmp/list"
 while read -r name repo path lic; do
   if git clone --depth 1 --quiet "$repo" "$tmp/$name"; then
     cp "$tmp/$name/$lic" "$tmp/$name/$path/LICENSE" 2>/dev/null || true
